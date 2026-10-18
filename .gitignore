@@ -1,0 +1,5 @@
+*.rbxl
+*.rbxlx
+/build/
+.DS_Store
+.vscode/
