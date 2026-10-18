@@ -27,6 +27,9 @@
       "$properties": {
         "FilteringEnabled": true
       },
+      "Map": {
+        "$path": "src/Map.rbxm"
+      },
       "Baseplate": {
         "$className": "Part",
         "$properties": {
