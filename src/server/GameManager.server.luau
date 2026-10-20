@@ -1,7 +1,16 @@
 -- src/server/GameManager.server.luau
 local Players = game:GetService("Players")
 
--- Phase definitions based on your 1-round design
+-- Require our modular components
+local ServerScriptService = game:GetService("ServerScriptService")
+-- Note: Depending on Rojo setup, modules are usually accessed relative to script location
+local modules = script.Parent:WaitForChild("modules")
+local RoleManager = require(modules:WaitForChild("RoleManager"))
+local HealthManager = require(modules:WaitForChild("HealthManager"))
+local SpawnManager = require(modules:WaitForChild("SpawnManager"))
+local PlacementManager = require(modules:WaitForChild("PlacementManager"))
+
+-- Phase definitions
 local Phase = {
 	SafeZone = "SafeZone",
 	Placement = "Placement",
@@ -10,42 +19,42 @@ local Phase = {
 }
 
 local currentPhase = Phase.SafeZone
-print("[TRAPSMITH] GameManager started. Current Phase: " .. currentPhase)
+print("[TRAPSMITH] GameManager started (Modular Architecture). Current Phase: " .. currentPhase)
 
-local function assignRoles(player: Player)
-	-- For testing 1 round: First player is Sniper, rest are Runners
-	if #Players:GetPlayers() == 1 then
-		player:SetAttribute("Role", "Sniper")
-		print(player.Name .. " assigned as SNIPER (10,000 HP, Sniper Scope view).")
-	else
-		player:SetAttribute("Role", "Runner")
-		print(player.Name .. " assigned as RUNNER (1,000 HP).")
-	end
-end
 
+-- Initialiser le PlacementManager ici avant le lancement de la boucle
+PlacementManager.init()
+
+-- Connect player lifecycle events
 Players.PlayerAdded:Connect(function(player)
-	assignRoles(player)
+	RoleManager.assignRole(player)
+
+	player.CharacterAdded:Connect(function(character)
+		task.wait(0.5) -- Small yield to ensure attributes sync
+		HealthManager.setupHealth(player, character)
+		SpawnManager.teleport(player, character)
+	end)
 end)
 
--- Simple function to simulate transitioning through the 4 phases of a round
+Players.PlayerRemoving:Connect(function(player)
+	print("[TRAPSMITH] " .. player.Name .. " left the game.")
+end)
+
+-- Main Round Loop
 task.spawn(function()
 	while true do
-		-- Phase 1: Safe Zone Shop (50 seconds or until all arrive)[cite: 8]
 		currentPhase = Phase.SafeZone
 		print(">>> PHASE: Safe Zone (Shopping & Healing)")
-		task.wait(10) -- Shortened to 10s for quick testing (Normally 50s)[cite: 8]
+		task.wait(10)
 
-		-- Phase 2: Obstacle Placement (20s per Runner)[cite: 8, 9]
 		currentPhase = Phase.Placement
 		print(">>> PHASE: Obstacle Placement (Runners building path)")
-		task.wait(10) -- Shortened for testing
+		task.wait(10)
 
-		-- Phase 3: Run / Hunt Phase (Action!)[cite: 8]
 		currentPhase = Phase.RunHunt
 		print(">>> PHASE: Run / Hunt (Sniper firing, Runners advancing)")
-		task.wait(15) -- Shortened for testing
+		task.wait(15)
 
-		-- Phase 4: Resolution (Award coins & check win/loss)[cite: 8, 9]
 		currentPhase = Phase.Resolution
 		print(">>> PHASE: Resolution (Awarding coins & scores)")
 		task.wait(5)
