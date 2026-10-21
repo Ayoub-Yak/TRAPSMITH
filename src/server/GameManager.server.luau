@@ -9,6 +9,7 @@ local RoleManager = require(modules:WaitForChild("RoleManager"))
 local HealthManager = require(modules:WaitForChild("HealthManager"))
 local SpawnManager = require(modules:WaitForChild("SpawnManager"))
 local PlacementManager = require(modules:WaitForChild("PlacementManager"))
+local CombatManager = require(modules:WaitForChild("CombatManager"))
 
 -- Phase definitions
 local Phase = {
@@ -24,6 +25,8 @@ print("[TRAPSMITH] GameManager started (Modular Architecture). Current Phase: " 
 
 -- Initialiser le PlacementManager ici avant le lancement de la boucle
 PlacementManager.init()
+
+CombatManager.init()
 
 -- Connect player lifecycle events
 Players.PlayerAdded:Connect(function(player)
