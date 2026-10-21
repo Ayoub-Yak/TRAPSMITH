@@ -1,15 +1,29 @@
 -- src/server/GameManager.server.luau
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Require our modular components
-local ServerScriptService = game:GetService("ServerScriptService")
--- Note: Depending on Rojo setup, modules are usually accessed relative to script location
 local modules = script.Parent:WaitForChild("modules")
 local RoleManager = require(modules:WaitForChild("RoleManager"))
 local HealthManager = require(modules:WaitForChild("HealthManager"))
 local SpawnManager = require(modules:WaitForChild("SpawnManager"))
 local PlacementManager = require(modules:WaitForChild("PlacementManager"))
 local CombatManager = require(modules:WaitForChild("CombatManager"))
+
+-- Setup RemoteEvent for Phase/Timer syncing
+local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+if not remotes then
+	remotes = Instance.new("Folder")
+	remotes.Name = "Remotes"
+	remotes.Parent = ReplicatedStorage
+end
+
+local phaseEvent = remotes:FindFirstChild("UpdatePhase")
+if not phaseEvent then
+	phaseEvent = Instance.new("RemoteEvent")
+	phaseEvent.Name = "UpdatePhase"
+	phaseEvent.Parent = remotes
+end
 
 -- Phase definitions
 local Phase = {
@@ -22,10 +36,10 @@ local Phase = {
 local currentPhase = Phase.SafeZone
 print("[TRAPSMITH] GameManager started (Modular Architecture). Current Phase: " .. currentPhase)
 
-
--- Initialiser le PlacementManager ici avant le lancement de la boucle
-PlacementManager.init()
-
+-- Initialiser les managers
+PlacementManager.init(function(): string
+	return currentPhase
+end)
 CombatManager.init()
 
 -- Connect player lifecycle events
@@ -43,24 +57,32 @@ Players.PlayerRemoving:Connect(function(player)
 	print("[TRAPSMITH] " .. player.Name .. " left the game.")
 end)
 
--- Main Round Loop
+-- Helper function to run a timed phase and broadcast to clients
+local function runPhase(phaseName: string, duration: number)
+	currentPhase = phaseName
+	print(">>> PHASE: " .. phaseName .. " (" .. duration .. "s)")
+
+	-- Countdown loop broadcasting to clients every second
+	for remaining = duration, 0, -1 do
+		phaseEvent:FireAllClients(currentPhase, remaining)
+		task.wait(1)
+	end
+end
+
+-- Main Round Loop with 20s timers
 task.spawn(function()
 	while true do
-		currentPhase = Phase.SafeZone
-		print(">>> PHASE: Safe Zone (Shopping & Healing)")
-		task.wait(10)
+		-- Phase 1: Safe Zone Shop (20 seconds)[cite: 8]
+		--runPhase(Phase.SafeZone, 20)
 
-		currentPhase = Phase.Placement
-		print(">>> PHASE: Obstacle Placement (Runners building path)")
-		task.wait(10)
+		-- Phase 2: Obstacle Placement (20 seconds)[cite: 8, 9]
+		runPhase(Phase.Placement, 20)
 
-		currentPhase = Phase.RunHunt
-		print(">>> PHASE: Run / Hunt (Sniper firing, Runners advancing)")
-		task.wait(15)
+		-- Phase 3: Run / Hunt Phase (30 seconds of action)[cite: 8]
+		--runPhase(Phase.RunHunt, 30)
 
-		currentPhase = Phase.Resolution
-		print(">>> PHASE: Resolution (Awarding coins & scores)")
-		task.wait(5)
+		-- Phase 4: Resolution (5 seconds for scores)[cite: 8, 9]
+		--runPhase(Phase.Resolution, 5)
 		
 		print("--- END OF TEST ROUND LOOP. RESTARTING ---")
 	end
