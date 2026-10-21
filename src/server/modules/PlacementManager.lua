@@ -32,24 +32,90 @@ local function isInsideRunnerSegment(position: Vector3, runnerSpawn: BasePart, s
 		and math.abs(localPosition.X) <= segmentWidth / 2
 end
 
+local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
+	local trap = Instance.new("Part")
+	trap.Name = "HiddenTrap"
+	trap.Size = Vector3.new(4, 1, 4)
+	trap.CFrame = targetCFrame
+	trap.Anchored = true
+	trap.CanCollide = false
+	trap.CanQuery = false
+	trap.Transparency = 0.5
+	trap.BrickColor = BrickColor.new("Really black")
+	trap.Parent = map
+
+	local triggered = false
+	trap.Touched:Connect(function(hit: BasePart)
+		if triggered then
+			return
+		end
+
+		local character = hit:FindFirstAncestorOfClass("Model")
+		local runner = character and game:GetService("Players"):GetPlayerFromCharacter(character)
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not runner or runner:GetAttribute("Role") ~= "Runner" or not humanoid then
+			return
+		end
+
+		triggered = true
+		local previousWalkSpeed = humanoid.WalkSpeed
+		local previousJumpPower = humanoid.JumpPower
+		humanoid.WalkSpeed = 0
+		humanoid.JumpPower = 0
+		runner:SetAttribute("Stuck", true)
+		trap:Destroy()
+
+		task.delay(2, function()
+			if humanoid.Parent then
+				humanoid.WalkSpeed = previousWalkSpeed
+				humanoid.JumpPower = previousJumpPower
+			end
+			if runner.Parent then
+				runner:SetAttribute("Stuck", false)
+			end
+		end)
+	end)
+
+	return trap
+end
+
 function PlacementManager.init(gameManagerRef: () -> string)
 	getCurrentPhase = gameManagerRef
 	print("[TRAPSMITH Module] PlacementManager initialized.")
 
 	placeEvent.OnServerEvent:Connect(function(player, modelName, targetCFrame)
 		local role = player:GetAttribute("Role")
-		if role ~= "Runner" then
-			warn(player.Name .. " tried to place an obstacle, but is not a Runner!")
+		local currentPhase = getCurrentPhase and getCurrentPhase() or ""
+		if typeof(targetCFrame) ~= "CFrame" then
+			warn(player.Name .. " sent an invalid placement CFrame.")
 			return
 		end
 
-		local currentPhase = getCurrentPhase and getCurrentPhase() or ""
-		if currentPhase ~= "Placement" then
+		if role == "Sniper" and currentPhase == "SniperPlacement" and modelName == "HiddenTrap" then
+			local trapCount = player:GetAttribute("HiddenTrapInventory")
+			if typeof(trapCount) ~= "number" or trapCount < 1 then
+				warn(player.Name .. " tried to place a trap without inventory.")
+				return
+			end
+
+			local map = Workspace:FindFirstChild("Map")
+			if not map then
+				warn("[TRAPSMITH Module] Map not found; cannot place hidden trap.")
+				return
+			end
+
+			player:SetAttribute("HiddenTrapInventory", trapCount - 1)
+			createHiddenTrap(map, targetCFrame)
+			print("[TRAPSMITH Module] Hidden trap placed by " .. player.Name)
+			return
+		end
+
+		if role ~= "Runner" or currentPhase ~= "RunnerPlacement" then
 			warn(player.Name .. " tried to place an obstacle outside the placement phase.")
 			return
 		end
 
-		if modelName ~= "BasicBlock" or typeof(targetCFrame) ~= "CFrame" then
+		if modelName ~= "BasicBlock" then
 			warn(player.Name .. " sent an invalid obstacle placement request.")
 			return
 		end

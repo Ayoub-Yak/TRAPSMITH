@@ -9,6 +9,7 @@ local HealthManager = require(modules:WaitForChild("HealthManager"))
 local SpawnManager = require(modules:WaitForChild("SpawnManager"))
 local PlacementManager = require(modules:WaitForChild("PlacementManager"))
 local CombatManager = require(modules:WaitForChild("CombatManager"))
+local ShopManager = require(modules:WaitForChild("ShopManager"))
 
 -- Setup RemoteEvent for Phase/Timer syncing
 local remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -28,7 +29,8 @@ end
 -- Phase definitions
 local Phase = {
 	SafeZone = "SafeZone",
-	Placement = "Placement",
+	RunnerPlacement = "RunnerPlacement",
+	SniperPlacement = "SniperPlacement",
 	RunHunt = "RunHunt",
 	Resolution = "Resolution"
 }
@@ -41,6 +43,7 @@ PlacementManager.init(function(): string
 	return currentPhase
 end)
 CombatManager.init()
+ShopManager.init()
 
 -- Connect player lifecycle events
 Players.PlayerAdded:Connect(function(player)
@@ -73,16 +76,19 @@ end
 task.spawn(function()
 	while true do
 		-- Phase 1: Safe Zone Shop (20 seconds)[cite: 8]
-		--runPhase(Phase.SafeZone, 20)
+		runPhase(Phase.SafeZone, 20)
 
-		-- Phase 2: Obstacle Placement (20 seconds)[cite: 8, 9]
-		runPhase(Phase.Placement, 20)
+		-- Phase 2: Runner obstacle placement (20 seconds)
+		runPhase(Phase.RunnerPlacement, 20)
 
-		-- Phase 3: Run / Hunt Phase (30 seconds of action)[cite: 8]
-		--runPhase(Phase.RunHunt, 30)
+		-- Phase 3: Sniper hidden trap placement (10 seconds)
+		runPhase(Phase.SniperPlacement, 10)
 
-		-- Phase 4: Resolution (5 seconds for scores)[cite: 8, 9]
-		--runPhase(Phase.Resolution, 5)
+		-- Phase 4: Run / Hunt Phase (30 seconds of action)
+		runPhase(Phase.RunHunt, 30)
+
+		-- Phase 5: Resolution (5 seconds for scores)
+		runPhase(Phase.Resolution, 5)
 		
 		print("--- END OF TEST ROUND LOOP. RESTARTING ---")
 	end

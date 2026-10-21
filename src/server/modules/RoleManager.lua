@@ -2,6 +2,21 @@ local Players = game:GetService("Players")
 local RoleManager = {}
 
 function RoleManager.assignRole(player: Player)
+	local sniperAlreadyAssigned = false
+	for _, otherPlayer in Players:GetPlayers() do
+		if otherPlayer ~= player and otherPlayer:GetAttribute("Role") == "Sniper" then
+			sniperAlreadyAssigned = true
+			break
+		end
+	end
+
+	if not sniperAlreadyAssigned then
+		player:SetAttribute("Role", "Sniper")
+		player:SetAttribute("SegmentIndex", nil)
+		print("[TRAPSMITH Module] " .. player.Name .. " assigned as SNIPER.")
+		return
+	end
+
 	player:SetAttribute("Role", "Runner")
 	local usedIndexes: {[number]: boolean} = {}
 	for _, otherPlayer in Players:GetPlayers() do
