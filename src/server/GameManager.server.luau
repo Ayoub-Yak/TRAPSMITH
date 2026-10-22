@@ -176,6 +176,18 @@ task.spawn(function()
 		runPhase(Phase.Resolution, 5, ResolutionManager.getWinner())
 		ResolutionManager.cleanupRound()
 
+		-- Phase 2: Runner obstacle placement (20 seconds)
+		runPhase(Phase.RunnerPlacement, 20)
+
+		-- Phase 3: Sniper hidden trap placement (10 seconds)
+		runPhase(Phase.SniperPlacement, 10)
+
+		-- Phase 4: Run / Hunt Phase (30 seconds of action)
+		runPhase(Phase.RunHunt, 30)
+
+		-- Phase 5: Resolution (5 seconds for scores)
+		runPhase(Phase.Resolution, 5)
+		
 		print("--- END OF TEST ROUND LOOP. RESTARTING ---")
 	end
 end)

@@ -40,6 +40,7 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 	trap.CFrame = targetCFrame
 	trap.Anchored = true
 	trap.CanCollide = false
+	trap.CanQuery = false
 	trap.Transparency = 0.5
 	trap.BrickColor = BrickColor.new("Really black")
 	trap.Parent = map
@@ -54,6 +55,9 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 		local player = character and Players:GetPlayerFromCharacter(character)
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not player or player:GetAttribute("Role") ~= "Runner" or not humanoid then
+		local runner = character and game:GetService("Players"):GetPlayerFromCharacter(character)
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not runner or runner:GetAttribute("Role") ~= "Runner" or not humanoid then
 			return
 		end
 
@@ -63,6 +67,7 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 		humanoid.WalkSpeed = 0
 		humanoid.JumpPower = 0
 		player:SetAttribute("Stuck", true)
+		runner:SetAttribute("Stuck", true)
 		trap:Destroy()
 
 		task.delay(2, function()
@@ -72,6 +77,8 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 			end
 			if player.Parent then
 				player:SetAttribute("Stuck", false)
+			if runner.Parent then
+				runner:SetAttribute("Stuck", false)
 			end
 		end)
 	end)
@@ -95,6 +102,9 @@ function PlacementManager.init(gameManagerRef: () -> string)
 			local inventory = player:GetAttribute("HiddenTrapInventory")
 			if typeof(inventory) ~= "number" or inventory < 1 then
 				warn(player.Name .. " has no hidden traps available.")
+			local trapCount = player:GetAttribute("HiddenTrapInventory")
+			if typeof(trapCount) ~= "number" or trapCount < 1 then
+				warn(player.Name .. " tried to place a trap without inventory.")
 				return
 			end
 
@@ -115,6 +125,13 @@ function PlacementManager.init(gameManagerRef: () -> string)
 		end
 
 		if currentPhase ~= "RunnerPlacement" then
+			player:SetAttribute("HiddenTrapInventory", trapCount - 1)
+			createHiddenTrap(map, targetCFrame)
+			print("[TRAPSMITH Module] Hidden trap placed by " .. player.Name)
+			return
+		end
+
+		if role ~= "Runner" or currentPhase ~= "RunnerPlacement" then
 			warn(player.Name .. " tried to place an obstacle outside the placement phase.")
 			return
 		end

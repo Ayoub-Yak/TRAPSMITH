@@ -5,6 +5,10 @@ function RoleManager.assignRole(player: Player)
 	for _, otherPlayer in Players:GetPlayers() do
 		if otherPlayer ~= player and otherPlayer:GetAttribute("Role") == "Sniper" then
 			player:SetAttribute("Role", "Runner")
+	local sniperAlreadyAssigned = false
+	for _, otherPlayer in Players:GetPlayers() do
+		if otherPlayer ~= player and otherPlayer:GetAttribute("Role") == "Sniper" then
+			sniperAlreadyAssigned = true
 			break
 		end
 	end
@@ -13,6 +17,9 @@ function RoleManager.assignRole(player: Player)
 		player:SetAttribute("Role", "Sniper")
 		player:SetAttribute("SegmentIndex", nil)
 		player:SetAttribute("Spectating", false)
+	if not sniperAlreadyAssigned then
+		player:SetAttribute("Role", "Sniper")
+		player:SetAttribute("SegmentIndex", nil)
 		print("[TRAPSMITH Module] " .. player.Name .. " assigned as SNIPER.")
 		return
 	end

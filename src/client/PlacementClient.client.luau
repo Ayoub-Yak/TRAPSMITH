@@ -40,6 +40,7 @@ local savedJumpPower: number? = nil
 local savedAutoRotate: boolean? = nil
 local savedRootAnchored: boolean? = nil
 local segmentVisual: Folder? = nil
+local trapVisualsHidden = false
 
 local function getRunnerSpawn(): BasePart?
 	local map = workspace:FindFirstChild("Map")
@@ -120,6 +121,24 @@ local function createSegmentWall(size: Vector3, cframe: CFrame): Part
 	wall.Color = Color3.fromRGB(0, 255, 120)
 	wall.Transparency = 0.75
 	return wall
+end
+
+local function updateTrapVisibility(shouldHide: boolean)
+	if trapVisualsHidden == shouldHide then
+		return
+	end
+
+	trapVisualsHidden = shouldHide
+	local map = workspace:FindFirstChild("Map")
+	if not map then
+		return
+	end
+
+	for _, descendant in map:GetDescendants() do
+		if descendant:IsA("BasePart") and descendant.Name == "HiddenTrap" then
+			descendant.LocalTransparencyModifier = if shouldHide then 1 else 0
+		end
+	end
 end
 
 local function setSegmentVisual(enabled: boolean, runnerSpawn: BasePart?)
@@ -262,7 +281,9 @@ end
 -- Update Ghost Position every frame
 RunService.RenderStepped:Connect(function(deltaTime: number)
 	local role = LocalPlayer:GetAttribute("Role")
+	updateTrapVisibility(role == "Runner")
 
+	-- Only Runners can place
 	local isRunnerPlacement = role == "Runner" and currentPhase == "RunnerPlacement"
 	local isSniperPlacement = role == "Sniper" and currentPhase == "SniperPlacement"
 	local canPlace = isRunnerPlacement or isSniperPlacement
@@ -276,11 +297,18 @@ RunService.RenderStepped:Connect(function(deltaTime: number)
 		return
 	end
 	setFreeView(isRunnerPlacement or isSniperPlacement)
+	if isSniperPlacement then
+		setSegmentVisual(false, nil)
+	end
 
 	local runnerSpawn = getRunnerSpawn()
 	local segmentIndex = getSegmentIndex()
 	if freeViewEnabled and runnerSpawn then
 		setSegmentVisual(isRunnerPlacement and segmentIndex ~= nil, runnerSpawn)
+		if isRunnerPlacement and segmentIndex then
+			setSegmentVisual(true, runnerSpawn)
+		end
+
 		local segmentLength, segmentWidth = getSegmentDimensions(runnerSpawn)
 		local segmentOffset = if segmentIndex then (segmentIndex - 1) * segmentLength else 0
 		local movement = getCameraMovement(runnerSpawn)
@@ -291,6 +319,7 @@ RunService.RenderStepped:Connect(function(deltaTime: number)
 		if isRunnerPlacement then
 			local segmentStart = -segmentOffset - segmentLength
 			local segmentEnd = -segmentOffset
+			-- Clamp only Runner camera movement; Sniper movement is map-wide.
 			local cameraBoundaryPadding = 20
 			cameraLocalPosition = Vector3.new(
 				math.clamp(
@@ -365,6 +394,7 @@ RunService.RenderStepped:Connect(function(deltaTime: number)
 		if isSniperPlacement
 			or (targetSpawn and targetSegmentIndex
 				and isInsideRunnerSegment(targetPos, targetSpawn, targetSegmentIndex)) then
+			and isInsideRunnerSegment(targetPos, targetSpawn, targetSegmentIndex)) then
 			ghost.CFrame = CFrame.new(targetPos)
 			ghost.Transparency = 0.4
 		else
@@ -396,11 +426,18 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if (runnerCanPlace or sniperCanPlace)
 			and ghostPart
 			and ghostPart.Transparency < 1 then
+		if (runnerCanPlace or sniperCanPlace) and ghostPart and ghostPart.Transparency < 1 then
 			-- Send placement request to server
 			local modelName = if sniperCanPlace then "HiddenTrap" else "BasicBlock"
 			placeEvent:FireServer(modelName, ghostPart.CFrame)
 			print("[TRAPSMITH Client] Sent placement request to server!")
 		end
+	end
+end)
+
+workspace.DescendantAdded:Connect(function(descendant)
+	if descendant:IsA("BasePart") and descendant.Name == "HiddenTrap" then
+		descendant.LocalTransparencyModifier = if LocalPlayer:GetAttribute("Role") == "Runner" then 1 else 0
 	end
 end)
 
