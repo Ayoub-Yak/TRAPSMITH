@@ -182,13 +182,14 @@ local function setFreeView(enabled: boolean)
 		targetCameraDistance = cameraDistance
 		local runnerSpawn = getRunnerSpawn()
 		local segmentIndex = getSegmentIndex()
-		if runnerSpawn and segmentIndex then
+		if runnerSpawn then
 			local segmentLength = getSegmentDimensions(runnerSpawn)
-			local segmentOffset = (segmentIndex - 1) * segmentLength
+			local segmentOffset = if segmentIndex then (segmentIndex - 1) * segmentLength else 0
+			local focusOffset = if segmentIndex then -segmentOffset - segmentLength / 2 else 0
 			cameraLocalPosition = Vector3.new(
 				0,
 				math.sin(cameraElevation) * cameraDistance + 3,
-				-segmentOffset - segmentLength / 2
+				focusOffset
 			)
 		end
 
@@ -238,8 +239,11 @@ end
 
 phaseEvent.OnClientEvent:Connect(function(phaseName: string)
 	currentPhase = phaseName
-	setFreeView(LocalPlayer:GetAttribute("Role") == "Runner"
-		and phaseName == "Placement")
+	local role = LocalPlayer:GetAttribute("Role")
+	setFreeView(
+		(role == "Runner" and phaseName == "RunnerPlacement")
+			or (role == "Sniper" and phaseName == "SniperPlacement")
+	)
 end)
 
 -- Create a placeholder transparent part for visual preview
@@ -259,8 +263,9 @@ end
 RunService.RenderStepped:Connect(function(deltaTime: number)
 	local role = LocalPlayer:GetAttribute("Role")
 
-	-- Only Runners can place
-	local canPlace = role == "Runner" and currentPhase == "Placement"
+	local isRunnerPlacement = role == "Runner" and currentPhase == "RunnerPlacement"
+	local isSniperPlacement = role == "Sniper" and currentPhase == "SniperPlacement"
+	local canPlace = isRunnerPlacement or isSniperPlacement
 	if not canPlace then
 		if ghostPart then
 			ghostPart:Destroy()
@@ -270,35 +275,43 @@ RunService.RenderStepped:Connect(function(deltaTime: number)
 		setSegmentVisual(false, nil)
 		return
 	end
-	setFreeView(true)
+	setFreeView(isRunnerPlacement or isSniperPlacement)
 
 	local runnerSpawn = getRunnerSpawn()
 	local segmentIndex = getSegmentIndex()
-	if freeViewEnabled and runnerSpawn and segmentIndex then
-		setSegmentVisual(true, runnerSpawn)
+	if freeViewEnabled and runnerSpawn then
+		setSegmentVisual(isRunnerPlacement and segmentIndex ~= nil, runnerSpawn)
 		local segmentLength, segmentWidth = getSegmentDimensions(runnerSpawn)
-		local segmentOffset = (segmentIndex - 1) * segmentLength
+		local segmentOffset = if segmentIndex then (segmentIndex - 1) * segmentLength else 0
 		local movement = getCameraMovement(runnerSpawn)
 		if movement.Magnitude > 0 then
 			cameraLocalPosition += movement * CAMERA_MOVE_SPEED * deltaTime
 		end
 
-		local segmentStart = -segmentOffset - segmentLength
-		local segmentEnd = -segmentOffset
-		local cameraBoundaryPadding = 20
-		cameraLocalPosition = Vector3.new(
-			math.clamp(
-				cameraLocalPosition.X,
-				-segmentWidth / 2 - cameraBoundaryPadding,
-				segmentWidth / 2 + cameraBoundaryPadding
-			),
-			math.sin(targetCameraElevation) * targetCameraDistance + 3,
-			math.clamp(
-				cameraLocalPosition.Z,
-				segmentStart - cameraBoundaryPadding,
-				segmentEnd + cameraBoundaryPadding
+		if isRunnerPlacement then
+			local segmentStart = -segmentOffset - segmentLength
+			local segmentEnd = -segmentOffset
+			local cameraBoundaryPadding = 20
+			cameraLocalPosition = Vector3.new(
+				math.clamp(
+					cameraLocalPosition.X,
+					-segmentWidth / 2 - cameraBoundaryPadding,
+					segmentWidth / 2 + cameraBoundaryPadding
+				),
+				math.sin(targetCameraElevation) * targetCameraDistance + 3,
+				math.clamp(
+					cameraLocalPosition.Z,
+					segmentStart - cameraBoundaryPadding,
+					segmentEnd + cameraBoundaryPadding
+				)
 			)
-		)
+		else
+			cameraLocalPosition = Vector3.new(
+				cameraLocalPosition.X,
+				math.sin(targetCameraElevation) * targetCameraDistance + 3,
+				cameraLocalPosition.Z
+			)
+		end
 
 		local cameraPosition = runnerSpawn.CFrame:PointToWorldSpace(cameraLocalPosition)
 		local horizontalLook = Vector3.new(
@@ -341,15 +354,17 @@ RunService.RenderStepped:Connect(function(deltaTime: number)
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = filterList
 
-	local result = workspace:Raycast(mouseRay.Origin, mouseRay.Direction * 200, raycastParams)
+	local rayDistance = if isSniperPlacement then 1000 else 200
+	local result = workspace:Raycast(mouseRay.Origin, mouseRay.Direction * rayDistance, raycastParams)
 
 	if result then
 		-- Position ghost slightly above ground so it sits nicely
 		local targetPos = result.Position + Vector3.new(0, ghost.Size.Y / 2, 0)
 		local targetSpawn = getRunnerSpawn()
 		local targetSegmentIndex = getSegmentIndex()
-		if targetSpawn and targetSegmentIndex
-			and isInsideRunnerSegment(targetPos, targetSpawn, targetSegmentIndex) then
+		if isSniperPlacement
+			or (targetSpawn and targetSegmentIndex
+				and isInsideRunnerSegment(targetPos, targetSpawn, targetSegmentIndex)) then
 			ghost.CFrame = CFrame.new(targetPos)
 			ghost.Transparency = 0.4
 		else
@@ -376,10 +391,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		local role = LocalPlayer:GetAttribute("Role")
-		local canPlace = currentPhase == "Placement"
-		if role == "Runner" and canPlace and ghostPart and ghostPart.Transparency < 1 then
+		local runnerCanPlace = role == "Runner" and currentPhase == "RunnerPlacement"
+		local sniperCanPlace = role == "Sniper" and currentPhase == "SniperPlacement"
+		if (runnerCanPlace or sniperCanPlace)
+			and ghostPart
+			and ghostPart.Transparency < 1 then
 			-- Send placement request to server
-			placeEvent:FireServer("BasicBlock", ghostPart.CFrame)
+			local modelName = if sniperCanPlace then "HiddenTrap" else "BasicBlock"
+			placeEvent:FireServer(modelName, ghostPart.CFrame)
 			print("[TRAPSMITH Client] Sent placement request to server!")
 		end
 	end
