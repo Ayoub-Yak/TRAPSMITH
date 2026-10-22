@@ -1,4 +1,3 @@
--- src/server/modules/PlacementManager.lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
@@ -6,7 +5,6 @@ local Players = game:GetService("Players")
 local PlacementManager = {}
 local getCurrentPhase: (() -> string)? = nil
 
--- Setup RemoteEvent for client-to-server communication
 local remotes = ReplicatedStorage:FindFirstChild("Remotes")
 if not remotes then
 	remotes = Instance.new("Folder")
@@ -52,10 +50,7 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 		end
 
 		local character = hit:FindFirstAncestorOfClass("Model")
-		local player = character and Players:GetPlayerFromCharacter(character)
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if not player or player:GetAttribute("Role") ~= "Runner" or not humanoid then
-		local runner = character and game:GetService("Players"):GetPlayerFromCharacter(character)
+		local runner = character and Players:GetPlayerFromCharacter(character)
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not runner or runner:GetAttribute("Role") ~= "Runner" or not humanoid then
 			return
@@ -66,7 +61,6 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 		local previousJumpPower = humanoid.JumpPower
 		humanoid.WalkSpeed = 0
 		humanoid.JumpPower = 0
-		player:SetAttribute("Stuck", true)
 		runner:SetAttribute("Stuck", true)
 		trap:Destroy()
 
@@ -75,8 +69,6 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 				humanoid.WalkSpeed = previousWalkSpeed
 				humanoid.JumpPower = previousJumpPower
 			end
-			if player.Parent then
-				player:SetAttribute("Stuck", false)
 			if runner.Parent then
 				runner:SetAttribute("Stuck", false)
 			end
@@ -90,7 +82,7 @@ function PlacementManager.init(gameManagerRef: () -> string)
 	getCurrentPhase = gameManagerRef
 	print("[TRAPSMITH Module] PlacementManager initialized.")
 
-	placeEvent.OnServerEvent:Connect(function(player, modelName, targetCFrame)
+	placeEvent.OnServerEvent:Connect(function(player: Player, modelName: any, targetCFrame: any)
 		local role = player:GetAttribute("Role")
 		local currentPhase = getCurrentPhase and getCurrentPhase() or ""
 		if typeof(targetCFrame) ~= "CFrame" then
@@ -101,9 +93,6 @@ function PlacementManager.init(gameManagerRef: () -> string)
 		if role == "Sniper" and currentPhase == "SniperPlacement" and modelName == "HiddenTrap" then
 			local inventory = player:GetAttribute("HiddenTrapInventory")
 			if typeof(inventory) ~= "number" or inventory < 1 then
-				warn(player.Name .. " has no hidden traps available.")
-			local trapCount = player:GetAttribute("HiddenTrapInventory")
-			if typeof(trapCount) ~= "number" or trapCount < 1 then
 				warn(player.Name .. " tried to place a trap without inventory.")
 				return
 			end
@@ -116,23 +105,12 @@ function PlacementManager.init(gameManagerRef: () -> string)
 
 			player:SetAttribute("HiddenTrapInventory", inventory - 1)
 			createHiddenTrap(map, targetCFrame)
-			return
-		end
-
-		if role ~= "Runner" then
-			warn(player.Name .. " tried to place an obstacle, but is not a Runner.")
-			return
-		end
-
-		if currentPhase ~= "RunnerPlacement" then
-			player:SetAttribute("HiddenTrapInventory", trapCount - 1)
-			createHiddenTrap(map, targetCFrame)
 			print("[TRAPSMITH Module] Hidden trap placed by " .. player.Name)
 			return
 		end
 
 		if role ~= "Runner" or currentPhase ~= "RunnerPlacement" then
-			warn(player.Name .. " tried to place an obstacle outside the placement phase.")
+			warn(player.Name .. " tried to place an obstacle outside the Runner placement phase.")
 			return
 		end
 
@@ -160,6 +138,7 @@ function PlacementManager.init(gameManagerRef: () -> string)
 		end
 
 		local newPart = Instance.new("Part")
+		newPart.Name = "BasicBlock"
 		newPart.Size = Vector3.new(4, 4, 4)
 		newPart.CFrame = targetCFrame
 		newPart.Anchored = true

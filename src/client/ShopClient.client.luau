@@ -8,72 +8,6 @@ local buyEvent = remotes:WaitForChild("BuyItem") :: RemoteEvent
 local phaseEvent = remotes:WaitForChild("UpdatePhase") :: RemoteEvent
 local currentPhase = ""
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "ShopGui"
-gui.ResetOnSpawn = false
-gui.Enabled = false
-gui.Parent = player:WaitForChild("PlayerGui")
-
-local panel = Instance.new("Frame")
-panel.AnchorPoint = Vector2.new(0.5, 0.5)
-panel.Position = UDim2.fromScale(0.5, 0.5)
-panel.Size = UDim2.fromOffset(520, 300)
-panel.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-panel.BorderColor3 = Color3.fromRGB(255, 70, 85)
-panel.Parent = gui
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 50)
-title.BackgroundTransparency = 1
-title.Text = "RUNNER SHOP  |  PRESS B TO CLOSE"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 20
-title.Parent = panel
-
-local coinsLabel = Instance.new("TextLabel")
-coinsLabel.Position = UDim2.new(1, -210, 0, 14)
-coinsLabel.Size = UDim2.fromOffset(190, 28)
-coinsLabel.BackgroundTransparency = 1
-coinsLabel.TextColor3 = Color3.fromRGB(255, 210, 90)
-coinsLabel.Font = Enum.Font.GothamBold
-coinsLabel.TextSize = 16
-coinsLabel.TextXAlignment = Enum.TextXAlignment.Right
-coinsLabel.Parent = panel
-
-local function updateCoins()
-	local leaderstats = player:FindFirstChild("leaderstats")
-	local coins = leaderstats and leaderstats:FindFirstChild("Coins")
-	coinsLabel.Text = if coins and coins:IsA("IntValue")
-		then tostring(coins.Value) .. " COINS"
-		else " 0 COINS"
-end
-
-local function addButton(text: string, itemId: string, position: UDim2)
-	local button = Instance.new("TextButton")
-	button.Position = position
-	button.Size = UDim2.fromOffset(230, 170)
-	button.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
-	button.TextColor3 = Color3.new(1, 1, 1)
-	button.Font = Enum.Font.GothamBold
-	button.TextSize = 18
-	button.Text = text
-	button.Parent = panel
-	button.Activated:Connect(function()
-		if gui.Enabled then buyEvent:FireServer(itemId) end
-	end)
-end
-
-addButton("SPEED BOOST\n150 COINS", "SpeedBuff", UDim2.fromOffset(20, 80))
-addButton("BODY SHIELD\n300 COINS", "Shield", UDim2.fromOffset(270, 80))
-
-local function canToggle()
-	return currentPhase == "SafeZone" and player:GetAttribute("Role") == "Runner"
-local LocalPlayer = Players.LocalPlayer
-local remotes = ReplicatedStorage:WaitForChild("Remotes")
-local buyEvent = remotes:WaitForChild("BuyItem") :: RemoteEvent
-local phaseEvent = remotes:WaitForChild("UpdatePhase") :: RemoteEvent
-
 local RED = Color3.fromRGB(255, 70, 85)
 local DARK = Color3.fromRGB(18, 18, 22)
 local PANEL = Color3.fromRGB(28, 28, 34)
@@ -84,10 +18,9 @@ shopGui.Name = "ShopGui"
 shopGui.ResetOnSpawn = false
 shopGui.IgnoreGuiInset = true
 shopGui.Enabled = false
-shopGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+shopGui.Parent = player:WaitForChild("PlayerGui")
 
 local overlay = Instance.new("Frame")
-overlay.Name = "Overlay"
 overlay.Size = UDim2.fromScale(1, 1)
 overlay.BackgroundColor3 = Color3.new(0, 0, 0)
 overlay.BackgroundTransparency = 0.3
@@ -95,7 +28,6 @@ overlay.BorderSizePixel = 0
 overlay.Parent = shopGui
 
 local panel = Instance.new("Frame")
-panel.Name = "ShopPanel"
 panel.AnchorPoint = Vector2.new(0.5, 0.5)
 panel.Position = UDim2.fromScale(0.5, 0.5)
 panel.Size = UDim2.fromOffset(700, 430)
@@ -148,13 +80,11 @@ closeHint.TextXAlignment = Enum.TextXAlignment.Right
 closeHint.Parent = panel
 
 local function updateCoins()
-	local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+	local leaderstats = player:FindFirstChild("leaderstats")
 	local coins = leaderstats and leaderstats:FindFirstChild("Coins")
-	if coins and coins:IsA("IntValue") then
-		coinsLabel.Text = tostring(coins.Value) .. " COINS"
-	else
-		coinsLabel.Text = " 0 COINS "
-	end
+	coinsLabel.Text = if coins and coins:IsA("IntValue")
+		then tostring(coins.Value) .. " COINS"
+		else "0 COINS"
 end
 
 local function makeItemCard(itemId: string, itemName: string, price: number, description: string, position: UDim2)
@@ -164,7 +94,6 @@ local function makeItemCard(itemId: string, itemName: string, price: number, des
 	card.Size = UDim2.fromOffset(310, 220)
 	card.BackgroundColor3 = PANEL
 	card.BorderColor3 = Color3.fromRGB(70, 70, 80)
-	card.BorderSizePixel = 1
 	card.Parent = panel
 
 	local itemTitle = Instance.new("TextLabel")
@@ -192,7 +121,6 @@ local function makeItemCard(itemId: string, itemName: string, price: number, des
 	itemDescription.Parent = card
 
 	local buyButton = Instance.new("TextButton")
-	buyButton.Name = "BuyButton"
 	buyButton.Size = UDim2.new(1, -32, 0, 48)
 	buyButton.Position = UDim2.new(0, 16, 1, -64)
 	buyButton.BackgroundColor3 = RED
@@ -202,20 +130,19 @@ local function makeItemCard(itemId: string, itemName: string, price: number, des
 	buyButton.Font = Enum.Font.GothamBold
 	buyButton.TextSize = 15
 	buyButton.Parent = card
-
 	buyButton.Activated:Connect(function()
 		if shopGui.Enabled then
 			buyEvent:FireServer(itemId)
 		end
 	end)
+
 end
 
 makeItemCard("SpeedBuff", "SPEED BOOST", 150, "Increase movement speed to 24 for the round.", UDim2.fromOffset(20, 115))
 makeItemCard("Shield", "BODY SHIELD", 300, "Protect your Runner with a round shield.", UDim2.fromOffset(370, 115))
 
-local currentPhase = ""
 local function canOpenShop(): boolean
-	return currentPhase == "SafeZone" and LocalPlayer:GetAttribute("Role") == "Runner"
+	return currentPhase == "SafeZone" and player:GetAttribute("Role") == "Runner"
 end
 
 local function setShopVisible(visible: boolean)
@@ -227,13 +154,14 @@ end
 
 phaseEvent.OnClientEvent:Connect(function(phaseName: string)
 	currentPhase = phaseName
-	if phaseName ~= "SafeZone" then gui.Enabled = false end
+	if phaseName ~= "SafeZone" then
+		setShopVisible(false)
+	end
 end)
 
-UserInputService.InputBegan:Connect(function(input, processed)
-	if not processed and input.KeyCode == Enum.KeyCode.B and canToggle() then
-		gui.Enabled = not gui.Enabled
-		updateCoins()
+UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+	if not gameProcessed and input.KeyCode == Enum.KeyCode.B and canOpenShop() then
+		setShopVisible(not shopGui.Enabled)
 	end
 end)
 
@@ -245,25 +173,3 @@ task.spawn(function()
 		updateCoins()
 	end
 end)
-	if phaseName ~= "SafeZone" then
-		setShopVisible(false)
-	end
-end)
-
-UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-	if gameProcessed or input.KeyCode ~= Enum.KeyCode.B then
-		return
-	end
-
-	if canOpenShop() then
-		setShopVisible(not shopGui.Enabled)
-	end
-end)
-
-local leaderstats = LocalPlayer:WaitForChild("leaderstats", 10)
-if leaderstats then
-	local coins = leaderstats:WaitForChild("Coins", 10)
-	if coins and coins:IsA("IntValue") then
-		coins.Changed:Connect(updateCoins)
-	end
-end

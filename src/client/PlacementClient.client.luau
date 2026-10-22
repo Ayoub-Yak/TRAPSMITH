@@ -1,34 +1,23 @@
--- src/client/PlacementClient.client.luau
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
-local Camera = workspace.CurrentCamera
-
--- Wait for the RemoteEvent setup by PlacementManager
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = workspace.CurrentCamera
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local placeEvent = remotes:WaitForChild("PlaceObstacle") :: RemoteEvent
 local phaseEvent = remotes:WaitForChild("UpdatePhase") :: RemoteEvent
 
--- Placement State
-local ghostPart: Part? = nil
 local currentPhase = ""
+local ghostPart: Part? = nil
 local freeViewEnabled = false
 local orbiting = false
 local cameraYaw = 0
 local cameraElevation = math.rad(55)
 local cameraDistance = 70
-local targetCameraYaw = cameraYaw
-local targetCameraElevation = cameraElevation
-local targetCameraDistance = cameraDistance
-local MIN_CAMERA_FOV = 25
-local MAX_CAMERA_FOV = 85
-local CAMERA_SMOOTHING = 12
-local targetCameraFov = Camera.FieldOfView
-local CAMERA_MOVE_SPEED = 45
+local targetCameraFov = camera.FieldOfView
 local cameraLocalPosition = Vector3.zero
 local movementKeys: {[Enum.KeyCode]: boolean} = {}
 local savedCameraSubject: Instance? = nil
@@ -42,73 +31,54 @@ local savedRootAnchored: boolean? = nil
 local segmentVisual: Folder? = nil
 local trapVisualsHidden = false
 
+local MIN_CAMERA_FOV = 25
+local MAX_CAMERA_FOV = 85
+local CAMERA_SMOOTHING = 12
+local CAMERA_MOVE_SPEED = 45
+
 local function getRunnerSpawn(): BasePart?
 	local map = workspace:FindFirstChild("Map")
-	local runnerSpawn = map and map:FindFirstChild("RunnerSpawn", true)
-	if runnerSpawn and runnerSpawn:IsA("BasePart") then
-		return runnerSpawn
-	end
-	return nil
+	local spawn = map and map:FindFirstChild("RunnerSpawn", true)
+	return if spawn and spawn:IsA("BasePart") then spawn else nil
 end
 
 local function getSegmentIndex(): number?
-	local segmentIndex = LocalPlayer:GetAttribute("SegmentIndex")
-	if typeof(segmentIndex) == "number" and segmentIndex >= 1 then
-		return segmentIndex
-	end
-	return nil
+	local value = player:GetAttribute("SegmentIndex")
+	return if typeof(value) == "number" and value >= 1 then value else nil
 end
 
-local function isInsideRunnerSegment(position: Vector3, runnerSpawn: BasePart, segmentIndex: number): boolean
-	local localPosition = runnerSpawn.CFrame:PointToObjectSpace(position)
-	local segmentLength = tonumber(runnerSpawn:GetAttribute("SegmentLength")) or 55
-	local segmentWidth = tonumber(runnerSpawn:GetAttribute("SegmentWidth")) or 100
+local function getSegmentDimensions(spawn: BasePart): (number, number)
+	return tonumber(spawn:GetAttribute("SegmentLength")) or 55,
+		tonumber(spawn:GetAttribute("SegmentWidth")) or 100
+end
+
+local function isInsideRunnerSegment(position: Vector3, spawn: BasePart, index: number): boolean
+	local localPosition = spawn.CFrame:PointToObjectSpace(position)
+	local length, width = getSegmentDimensions(spawn)
 	local forwardDistance = -localPosition.Z
-	local segmentStart = (segmentIndex - 1) * segmentLength
-
-	return forwardDistance >= segmentStart
-		and forwardDistance <= segmentStart + segmentLength
-		and math.abs(localPosition.X) <= segmentWidth / 2
+	local startDistance = (index - 1) * length
+	return forwardDistance >= startDistance
+		and forwardDistance <= startDistance + length
+		and math.abs(localPosition.X) <= width / 2
 end
 
-local function getSegmentDimensions(runnerSpawn: BasePart): (number, number)
-	return tonumber(runnerSpawn:GetAttribute("SegmentLength")) or 55,
-		tonumber(runnerSpawn:GetAttribute("SegmentWidth")) or 100
+local function updateTrapVisibility(hide: boolean)
+	if trapVisualsHidden == hide then
+		return
+	end
+	trapVisualsHidden = hide
+	local map = workspace:FindFirstChild("Map")
+	if not map then
+		return
+	end
+	for _, descendant in map:GetDescendants() do
+		if descendant:IsA("BasePart") and descendant.Name == "HiddenTrap" then
+			descendant.LocalTransparencyModifier = if hide then 1 else 0
+		end
+	end
 end
 
-local function getCameraMovement(runnerSpawn: BasePart): Vector3
-	local forward = Vector3.new(Camera.CFrame.LookVector.X, 0, Camera.CFrame.LookVector.Z)
-	local right = Vector3.new(Camera.CFrame.RightVector.X, 0, Camera.CFrame.RightVector.Z)
-
-	if forward.Magnitude > 0 then
-		forward = forward.Unit
-	end
-	if right.Magnitude > 0 then
-		right = right.Unit
-	end
-
-	local worldMovement = Vector3.zero
-	if movementKeys[Enum.KeyCode.W] or movementKeys[Enum.KeyCode.Z] then
-		worldMovement += forward
-	end
-	if movementKeys[Enum.KeyCode.S] then
-		worldMovement -= forward
-	end
-	if movementKeys[Enum.KeyCode.A] or movementKeys[Enum.KeyCode.Q] then
-		worldMovement -= right
-	end
-	if movementKeys[Enum.KeyCode.D] then
-		worldMovement += right
-	end
-
-	if worldMovement.Magnitude > 1 then
-		worldMovement = worldMovement.Unit
-	end
-
-	return runnerSpawn.CFrame:VectorToObjectSpace(worldMovement)
-end
-
-local function createSegmentWall(size: Vector3, cframe: CFrame): Part
+local function createWall(size: Vector3, cframe: CFrame): Part
 	local wall = Instance.new("Part")
 	wall.Name = "RunnerSegmentBoundary"
 	wall.Size = size
@@ -123,57 +93,32 @@ local function createSegmentWall(size: Vector3, cframe: CFrame): Part
 	return wall
 end
 
-local function updateTrapVisibility(shouldHide: boolean)
-	if trapVisualsHidden == shouldHide then
-		return
-	end
-
-	trapVisualsHidden = shouldHide
-	local map = workspace:FindFirstChild("Map")
-	if not map then
-		return
-	end
-
-	for _, descendant in map:GetDescendants() do
-		if descendant:IsA("BasePart") and descendant.Name == "HiddenTrap" then
-			descendant.LocalTransparencyModifier = if shouldHide then 1 else 0
-		end
-	end
-end
-
-local function setSegmentVisual(enabled: boolean, runnerSpawn: BasePart?)
-	if not enabled or not runnerSpawn then
+local function setSegmentVisual(enabled: boolean, spawn: BasePart?)
+	if not enabled or not spawn then
 		if segmentVisual then
 			segmentVisual:Destroy()
 			segmentVisual = nil
 		end
 		return
 	end
-
 	if segmentVisual then
 		return
 	end
 
-	local segmentLength, segmentWidth = getSegmentDimensions(runnerSpawn)
-	local segmentIndex = getSegmentIndex()
-	if not segmentIndex then
+	local index = getSegmentIndex()
+	if not index then
 		return
 	end
-
-	local height = 8
-	local thickness = 0.15
+	local length, width = getSegmentDimensions(spawn)
+	local offset = (index - 1) * length
+	local center = spawn.CFrame * CFrame.new(0, 4, -offset - length / 2)
 	local folder = Instance.new("Folder")
 	folder.Name = "RunnerSegmentVisual"
 	folder.Parent = workspace
-
-	local sideSize = Vector3.new(thickness, height, segmentLength)
-	local endSize = Vector3.new(segmentWidth, height, thickness)
-	local segmentOffset = (segmentIndex - 1) * segmentLength
-	local center = runnerSpawn.CFrame * CFrame.new(0, height / 2, -segmentOffset - segmentLength / 2)
-	createSegmentWall(sideSize, center * CFrame.new(-segmentWidth / 2, 0, 0)).Parent = folder
-	createSegmentWall(sideSize, center * CFrame.new(segmentWidth / 2, 0, 0)).Parent = folder
-	createSegmentWall(endSize, runnerSpawn.CFrame * CFrame.new(0, height / 2, -segmentOffset)).Parent = folder
-	createSegmentWall(endSize, runnerSpawn.CFrame * CFrame.new(0, height / 2, -segmentOffset - segmentLength)).Parent = folder
+	createWall(Vector3.new(0.15, 8, length), center * CFrame.new(-width / 2, 0, 0)).Parent = folder
+	createWall(Vector3.new(0.15, 8, length), center * CFrame.new(width / 2, 0, 0)).Parent = folder
+	createWall(Vector3.new(width, 8, 0.15), spawn.CFrame * CFrame.new(0, 4, -offset)).Parent = folder
+	createWall(Vector3.new(width, 8, 0.15), spawn.CFrame * CFrame.new(0, 4, -offset - length)).Parent = folder
 	segmentVisual = folder
 end
 
@@ -181,37 +126,27 @@ local function setFreeView(enabled: boolean)
 	if freeViewEnabled == enabled then
 		return
 	end
-
 	freeViewEnabled = enabled
-	local character = LocalPlayer.Character
+	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
 
 	if enabled then
-		savedCameraSubject = Camera.CameraSubject
-		savedCameraMode = LocalPlayer.CameraMode
+		savedCameraSubject = camera.CameraSubject
+		savedCameraMode = player.CameraMode
 		savedMouseBehavior = UserInputService.MouseBehavior
-		savedFieldOfView = Camera.FieldOfView
-		Camera.CameraType = Enum.CameraType.Scriptable
-		LocalPlayer.CameraMode = Enum.CameraMode.Classic
-		targetCameraFov = Camera.FieldOfView
-		orbiting = false
-		targetCameraYaw = cameraYaw
-		targetCameraElevation = cameraElevation
-		targetCameraDistance = cameraDistance
-		local runnerSpawn = getRunnerSpawn()
-		local segmentIndex = getSegmentIndex()
-		if runnerSpawn then
-			local segmentLength = getSegmentDimensions(runnerSpawn)
-			local segmentOffset = if segmentIndex then (segmentIndex - 1) * segmentLength else 0
-			local focusOffset = if segmentIndex then -segmentOffset - segmentLength / 2 else 0
-			cameraLocalPosition = Vector3.new(
-				0,
-				math.sin(cameraElevation) * cameraDistance + 3,
-				focusOffset
-			)
+		savedFieldOfView = camera.FieldOfView
+		camera.CameraType = Enum.CameraType.Scriptable
+		player.CameraMode = Enum.CameraMode.Classic
+		local spawn = getRunnerSpawn()
+		local index = getSegmentIndex()
+		if spawn then
+			local length = getSegmentDimensions(spawn)
+			local offset = if index then (index - 1) * length else 0
+			cameraLocalPosition = Vector3.new(0, 60, if index then -offset - length / 2 else 0)
+		else
+			cameraLocalPosition = Vector3.new(0, 60, 0)
 		end
-
 		if humanoid then
 			savedWalkSpeed = humanoid.WalkSpeed
 			savedJumpPower = humanoid.JumpPower
@@ -220,73 +155,68 @@ local function setFreeView(enabled: boolean)
 			humanoid.JumpPower = 0
 			humanoid.AutoRotate = false
 		end
-
-		if rootPart and rootPart:IsA("BasePart") then
-			savedRootAnchored = rootPart.Anchored
-			rootPart.Anchored = true
+		if root and root:IsA("BasePart") then
+			savedRootAnchored = root.Anchored
+			root.Anchored = true
 		end
 	else
 		orbiting = false
 		UserInputService.MouseBehavior = savedMouseBehavior or Enum.MouseBehavior.Default
-		Camera.CameraType = Enum.CameraType.Custom
-		LocalPlayer.CameraMode = savedCameraMode or Enum.CameraMode.Classic
-		Camera.FieldOfView = savedFieldOfView or 70
-
-		local currentCharacter = LocalPlayer.Character
-		local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
-		Camera.CameraSubject = currentHumanoid or savedCameraSubject
-
+		camera.CameraType = Enum.CameraType.Custom
+		player.CameraMode = savedCameraMode or Enum.CameraMode.Classic
+		camera.FieldOfView = savedFieldOfView or 70
+		local currentCharacter = player.Character
+		camera.CameraSubject = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+			or savedCameraSubject
 		if humanoid then
 			humanoid.WalkSpeed = savedWalkSpeed or 16
 			humanoid.JumpPower = savedJumpPower or 50
 			humanoid.AutoRotate = savedAutoRotate ~= false
 		end
-
-		if rootPart and rootPart:IsA("BasePart") then
-			rootPart.Anchored = savedRootAnchored == true
+		if root and root:IsA("BasePart") then
+			root.Anchored = savedRootAnchored == true
 		end
-
 		savedCameraSubject = nil
 		savedCameraMode = nil
 		savedMouseBehavior = nil
 		savedFieldOfView = nil
+		savedWalkSpeed = nil
+		savedJumpPower = nil
 		savedAutoRotate = nil
 		savedRootAnchored = nil
 		movementKeys = {}
 	end
 end
 
+local function createGhost(): Part
+	local part = Instance.new("Part")
+	part.Name = "PlacementGhost"
+	part.Size = Vector3.new(4, 4, 4)
+	part.Color = Color3.fromRGB(0, 255, 120)
+	part.Material = Enum.Material.ForceField
+	part.Transparency = 1
+	part.CanCollide = false
+	part.Anchored = true
+	part.Parent = workspace
+	return part
+end
+
 phaseEvent.OnClientEvent:Connect(function(phaseName: string)
 	currentPhase = phaseName
-	local role = LocalPlayer:GetAttribute("Role")
+	local role = player:GetAttribute("Role")
 	setFreeView(
 		(role == "Runner" and phaseName == "RunnerPlacement")
 			or (role == "Sniper" and phaseName == "SniperPlacement")
 	)
 end)
 
--- Create a placeholder transparent part for visual preview
-local function createGhostPart(): Part
-	local part = Instance.new("Part")
-	part.Name = "PlacementGhost"
-	part.Size = Vector3.new(4, 4, 4) -- Standard block size
-	part.Color = Color3.fromRGB(0, 255, 120) -- Neon Green
-	part.Material = Enum.Material.ForceField -- Fixed capitalization
-	part.Transparency = 0.5
-	part.CanCollide = false
-	part.Anchored = true
-	return part
-end
-
--- Update Ghost Position every frame
 RunService.RenderStepped:Connect(function(deltaTime: number)
-	local role = LocalPlayer:GetAttribute("Role")
+	local role = player:GetAttribute("Role")
+	local runnerPlacement = role == "Runner" and currentPhase == "RunnerPlacement"
+	local sniperPlacement = role == "Sniper" and currentPhase == "SniperPlacement"
+	local canPlace = runnerPlacement or sniperPlacement
 	updateTrapVisibility(role == "Runner")
 
-	-- Only Runners can place
-	local isRunnerPlacement = role == "Runner" and currentPhase == "RunnerPlacement"
-	local isSniperPlacement = role == "Sniper" and currentPhase == "SniperPlacement"
-	local canPlace = isRunnerPlacement or isSniperPlacement
 	if not canPlace then
 		if ghostPart then
 			ghostPart:Destroy()
@@ -296,177 +226,107 @@ RunService.RenderStepped:Connect(function(deltaTime: number)
 		setSegmentVisual(false, nil)
 		return
 	end
-	setFreeView(isRunnerPlacement or isSniperPlacement)
-	if isSniperPlacement then
-		setSegmentVisual(false, nil)
-	end
 
-	local runnerSpawn = getRunnerSpawn()
-	local segmentIndex = getSegmentIndex()
-	if freeViewEnabled and runnerSpawn then
-		setSegmentVisual(isRunnerPlacement and segmentIndex ~= nil, runnerSpawn)
-		if isRunnerPlacement and segmentIndex then
-			setSegmentVisual(true, runnerSpawn)
-		end
+	local spawn = getRunnerSpawn()
+	local index = getSegmentIndex()
+	setSegmentVisual(runnerPlacement and index ~= nil, spawn)
+	if freeViewEnabled and spawn then
+		local forward = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+		local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
+		if forward.Magnitude > 0 then forward = forward.Unit end
+		if right.Magnitude > 0 then right = right.Unit end
+		local movement = Vector3.zero
+		if movementKeys[Enum.KeyCode.W] or movementKeys[Enum.KeyCode.Z] then movement += forward end
+		if movementKeys[Enum.KeyCode.S] then movement -= forward end
+		if movementKeys[Enum.KeyCode.A] or movementKeys[Enum.KeyCode.Q] then movement -= right end
+		if movementKeys[Enum.KeyCode.D] then movement += right end
+		if movement.Magnitude > 1 then movement = movement.Unit end
+		cameraLocalPosition += spawn.CFrame:VectorToObjectSpace(movement) * CAMERA_MOVE_SPEED * deltaTime
 
-		local segmentLength, segmentWidth = getSegmentDimensions(runnerSpawn)
-		local segmentOffset = if segmentIndex then (segmentIndex - 1) * segmentLength else 0
-		local movement = getCameraMovement(runnerSpawn)
-		if movement.Magnitude > 0 then
-			cameraLocalPosition += movement * CAMERA_MOVE_SPEED * deltaTime
-		end
-
-		if isRunnerPlacement then
-			local segmentStart = -segmentOffset - segmentLength
-			local segmentEnd = -segmentOffset
-			-- Clamp only Runner camera movement; Sniper movement is map-wide.
-			local cameraBoundaryPadding = 20
+		if runnerPlacement and index then
+			local length, width = getSegmentDimensions(spawn)
+			local offset = (index - 1) * length
 			cameraLocalPosition = Vector3.new(
-				math.clamp(
-					cameraLocalPosition.X,
-					-segmentWidth / 2 - cameraBoundaryPadding,
-					segmentWidth / 2 + cameraBoundaryPadding
-				),
-				math.sin(targetCameraElevation) * targetCameraDistance + 3,
-				math.clamp(
-					cameraLocalPosition.Z,
-					segmentStart - cameraBoundaryPadding,
-					segmentEnd + cameraBoundaryPadding
-				)
-			)
-		else
-			cameraLocalPosition = Vector3.new(
-				cameraLocalPosition.X,
-				math.sin(targetCameraElevation) * targetCameraDistance + 3,
-				cameraLocalPosition.Z
+				math.clamp(cameraLocalPosition.X, -width / 2 - 20, width / 2 + 20),
+				cameraLocalPosition.Y,
+				math.clamp(cameraLocalPosition.Z, -offset - length - 20, -offset + 20)
 			)
 		end
 
-		local cameraPosition = runnerSpawn.CFrame:PointToWorldSpace(cameraLocalPosition)
-		local horizontalLook = Vector3.new(
-			math.sin(targetCameraYaw) * math.cos(targetCameraElevation),
-			-math.sin(targetCameraElevation),
-			-math.cos(targetCameraYaw) * math.cos(targetCameraElevation)
+		local worldPosition = spawn.CFrame:PointToWorldSpace(cameraLocalPosition)
+		local lookDirection = Vector3.new(
+			math.sin(cameraYaw) * math.cos(cameraElevation),
+			-math.sin(cameraElevation),
+			-math.cos(cameraYaw) * math.cos(cameraElevation)
 		)
-		local lookPosition = runnerSpawn.CFrame:PointToWorldSpace(
-			cameraLocalPosition + horizontalLook * targetCameraDistance
-		)
-		local targetCameraCFrame = CFrame.lookAt(cameraPosition, lookPosition)
-		Camera.CFrame = Camera.CFrame:Lerp(
-			targetCameraCFrame,
-			math.clamp(deltaTime * CAMERA_SMOOTHING, 0, 1)
-		)
-		Camera.FieldOfView += (targetCameraFov - Camera.FieldOfView)
-			* math.clamp(deltaTime * CAMERA_SMOOTHING, 0, 1)
+		local target = spawn.CFrame:PointToWorldSpace(cameraLocalPosition + lookDirection * cameraDistance)
+		camera.CFrame = camera.CFrame:Lerp(CFrame.lookAt(worldPosition, target), math.clamp(deltaTime * CAMERA_SMOOTHING, 0, 1))
+		camera.FieldOfView += (targetCameraFov - camera.FieldOfView) * math.clamp(deltaTime * CAMERA_SMOOTHING, 0, 1)
 	end
 
-	-- Create ghost if it doesn't exist
 	if not ghostPart then
-		local newGhost = createGhostPart()
-		newGhost.Parent = workspace
-		ghostPart = newGhost
+		ghostPart = createGhost()
 	end
-
-	-- Type assertion check for Luau
 	local ghost = ghostPart
-	if not ghost then return end
-
-	-- Raycast from mouse to find position on floor/ground
-	local mouseRay = Mouse.UnitRay
-	local raycastParams = RaycastParams.new()
-
-	local filterList = {ghost}
-	if LocalPlayer.Character then
-		table.insert(filterList, LocalPlayer.Character)
+	if not ghost then
+		return
 	end
-
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = filterList
-
-	local rayDistance = if isSniperPlacement then 1000 else 200
-	local result = workspace:Raycast(mouseRay.Origin, mouseRay.Direction * rayDistance, raycastParams)
-
-	if result then
-		-- Position ghost slightly above ground so it sits nicely
-		local targetPos = result.Position + Vector3.new(0, ghost.Size.Y / 2, 0)
-		local targetSpawn = getRunnerSpawn()
-		local targetSegmentIndex = getSegmentIndex()
-		if isSniperPlacement
-			or (targetSpawn and targetSegmentIndex
-				and isInsideRunnerSegment(targetPos, targetSpawn, targetSegmentIndex)) then
-			and isInsideRunnerSegment(targetPos, targetSpawn, targetSegmentIndex)) then
-			ghost.CFrame = CFrame.new(targetPos)
-			ghost.Transparency = 0.4
-		else
-			ghost.Transparency = 1
-		end
-	else
-		ghost.Transparency = 1 -- Hide if pointing at sky
-	end
-end)
-
--- Detect Left Click to Place
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-
-	if freeViewEnabled and input.UserInputType == Enum.UserInputType.Keyboard then
-		movementKeys[input.KeyCode] = true
-	end
-
-	if input.UserInputType == Enum.UserInputType.MouseButton2 and freeViewEnabled then
-		orbiting = true
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = {ghost, player.Character}
+	local distance = if sniperPlacement then 1000 else 200
+	local result = workspace:Raycast(mouse.UnitRay.Origin, mouse.UnitRay.Direction * distance, rayParams)
+	if not result then
+		ghost.Transparency = 1
 		return
 	end
 
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		local role = LocalPlayer:GetAttribute("Role")
+	local position = result.Position + Vector3.new(0, ghost.Size.Y / 2, 0)
+	local valid = sniperPlacement
+		or (spawn ~= nil and index ~= nil and isInsideRunnerSegment(position, spawn, index))
+	ghost.CFrame = CFrame.new(position)
+	ghost.Transparency = if valid then 0.4 else 1
+end)
+
+UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+	if gameProcessed then return end
+	if freeViewEnabled and input.UserInputType == Enum.UserInputType.Keyboard then
+		movementKeys[input.KeyCode] = true
+	end
+	if input.UserInputType == Enum.UserInputType.MouseButton2 and freeViewEnabled then
+		orbiting = true
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+	elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+		local role = player:GetAttribute("Role")
 		local runnerCanPlace = role == "Runner" and currentPhase == "RunnerPlacement"
 		local sniperCanPlace = role == "Sniper" and currentPhase == "SniperPlacement"
-		if (runnerCanPlace or sniperCanPlace)
-			and ghostPart
-			and ghostPart.Transparency < 1 then
 		if (runnerCanPlace or sniperCanPlace) and ghostPart and ghostPart.Transparency < 1 then
-			-- Send placement request to server
-			local modelName = if sniperCanPlace then "HiddenTrap" else "BasicBlock"
-			placeEvent:FireServer(modelName, ghostPart.CFrame)
-			print("[TRAPSMITH Client] Sent placement request to server!")
+			placeEvent:FireServer(if sniperCanPlace then "HiddenTrap" else "BasicBlock", ghostPart.CFrame)
 		end
 	end
 end)
 
-workspace.DescendantAdded:Connect(function(descendant)
-	if descendant:IsA("BasePart") and descendant.Name == "HiddenTrap" then
-		descendant.LocalTransparencyModifier = if LocalPlayer:GetAttribute("Role") == "Runner" then 1 else 0
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
+UserInputService.InputEnded:Connect(function(input: InputObject)
 	if input.UserInputType == Enum.UserInputType.Keyboard then
 		movementKeys[input.KeyCode] = nil
-	end
-
-	if input.UserInputType == Enum.UserInputType.MouseButton2 and orbiting then
+	elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
 		orbiting = false
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	end
 end)
 
-UserInputService.InputChanged:Connect(function(input, gameProcessed)
+UserInputService.InputChanged:Connect(function(input: InputObject, gameProcessed: boolean)
 	if gameProcessed or not freeViewEnabled then return end
-
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
-		targetCameraFov = math.clamp(
-			targetCameraFov - input.Position.Z * 5,
-			MIN_CAMERA_FOV,
-			MAX_CAMERA_FOV
-		)
+		targetCameraFov = math.clamp(targetCameraFov - input.Position.Z * 5, MIN_CAMERA_FOV, MAX_CAMERA_FOV)
 	elseif input.UserInputType == Enum.UserInputType.MouseMovement and orbiting then
-		targetCameraYaw -= input.Delta.X * 0.005
-		targetCameraElevation = math.clamp(
-			targetCameraElevation + input.Delta.Y * 0.005,
-			math.rad(25),
-			math.rad(85)
-		)
+		cameraYaw -= input.Delta.X * 0.005
+		cameraElevation = math.clamp(cameraElevation + input.Delta.Y * 0.005, math.rad(25), math.rad(85))
+	end
+end)
+
+workspace.DescendantAdded:Connect(function(descendant)
+	if descendant:IsA("BasePart") and descendant.Name == "HiddenTrap" then
+		descendant.LocalTransparencyModifier = if player:GetAttribute("Role") == "Runner" then 1 else 0
 	end
 end)

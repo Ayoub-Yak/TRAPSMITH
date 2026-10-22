@@ -8,16 +8,6 @@ local buyEvent = remotes:WaitForChild("BuySniperItem") :: RemoteEvent
 local phaseEvent = remotes:WaitForChild("UpdatePhase") :: RemoteEvent
 local currentPhase = ""
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "SniperShopGui"
-gui.ResetOnSpawn = false
-gui.Enabled = false
-gui.Parent = player:WaitForChild("PlayerGui")
-local LocalPlayer = Players.LocalPlayer
-local remotes = ReplicatedStorage:WaitForChild("Remotes")
-local buyEvent = remotes:WaitForChild("BuySniperItem") :: RemoteEvent
-local phaseEvent = remotes:WaitForChild("UpdatePhase") :: RemoteEvent
-
 local ACCENT = Color3.fromRGB(180, 35, 45)
 local DARK = Color3.fromRGB(12, 10, 12)
 local PANEL = Color3.fromRGB(30, 20, 22)
@@ -28,7 +18,7 @@ shopGui.Name = "SniperShopGui"
 shopGui.ResetOnSpawn = false
 shopGui.IgnoreGuiInset = true
 shopGui.Enabled = false
-shopGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+shopGui.Parent = player:WaitForChild("PlayerGui")
 
 local overlay = Instance.new("Frame")
 overlay.Size = UDim2.fromScale(1, 1)
@@ -40,32 +30,6 @@ overlay.Parent = shopGui
 local panel = Instance.new("Frame")
 panel.AnchorPoint = Vector2.new(0.5, 0.5)
 panel.Position = UDim2.fromScale(0.5, 0.5)
-panel.Size = UDim2.fromOffset(520, 300)
-panel.BackgroundColor3 = Color3.fromRGB(14, 10, 12)
-panel.BorderColor3 = Color3.fromRGB(180, 35, 45)
-panel.Parent = gui
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 50)
-title.BackgroundTransparency = 1
-title.Text = "SNIPER SHOP  |  PRESS B TO CLOSE"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 20
-title.Parent = panel
-
-local coinsLabel = Instance.new("TextLabel")
-coinsLabel.Position = UDim2.new(1, -210, 0, 14)
-coinsLabel.Size = UDim2.fromOffset(190, 28)
-coinsLabel.BackgroundTransparency = 1
-coinsLabel.TextColor3 = Color3.fromRGB(255, 190, 90)
-coinsLabel.Font = Enum.Font.GothamBold
-coinsLabel.TextSize = 16
-coinsLabel.TextXAlignment = Enum.TextXAlignment.Right
-coinsLabel.Parent = panel
-
-local function updateCoins()
-	local leaderstats = player:FindFirstChild("leaderstats")
 panel.Size = UDim2.fromOffset(700, 430)
 panel.BackgroundColor3 = DARK
 panel.BorderColor3 = ACCENT
@@ -116,47 +80,20 @@ closeHint.TextXAlignment = Enum.TextXAlignment.Right
 closeHint.Parent = panel
 
 local function updateCoins()
-	local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+	local leaderstats = player:FindFirstChild("leaderstats")
 	local coins = leaderstats and leaderstats:FindFirstChild("Coins")
 	coinsLabel.Text = if coins and coins:IsA("IntValue")
 		then tostring(coins.Value) .. " COINS"
-		else " 0 COINS"
+		else "0 COINS"
 end
 
-local function addButton(text: string, itemId: string, position: UDim2)
-	local button = Instance.new("TextButton")
-	button.Position = position
-	button.Size = UDim2.fromOffset(230, 170)
-	button.BackgroundColor3 = Color3.fromRGB(38, 22, 25)
-	button.TextColor3 = Color3.new(1, 1, 1)
-	button.Font = Enum.Font.GothamBold
-	button.TextSize = 16
-	button.Text = text
-	button.Parent = panel
-	button.Activated:Connect(function()
-		if gui.Enabled then buyEvent:FireServer(itemId) end
-	end)
-end
-
-addButton("ONE-SHOT ROUNDS\n400 COINS", "OneShotRounds", UDim2.fromOffset(20, 80))
-addButton("HIDDEN TRAPS\n250 COINS", "HiddenTraps", UDim2.fromOffset(270, 80))
-
-local function canToggle()
-	return currentPhase == "SafeZone" and player:GetAttribute("Role") == "Sniper"
-local function makeItemCard(
-	itemId: string,
-	itemName: string,
-	price: number,
-	description: string,
-	position: UDim2
-)
+local function makeItemCard(itemId: string, itemName: string, price: number, description: string, position: UDim2)
 	local card = Instance.new("Frame")
 	card.Name = itemId .. "Card"
 	card.Position = position
 	card.Size = UDim2.fromOffset(310, 220)
 	card.BackgroundColor3 = PANEL
 	card.BorderColor3 = Color3.fromRGB(90, 45, 50)
-	card.BorderSizePixel = 1
 	card.Parent = panel
 
 	local itemTitle = Instance.new("TextLabel")
@@ -193,7 +130,6 @@ local function makeItemCard(
 	buyButton.Font = Enum.Font.GothamBold
 	buyButton.TextSize = 15
 	buyButton.Parent = card
-
 	buyButton.Activated:Connect(function()
 		if shopGui.Enabled then
 			buyEvent:FireServer(itemId)
@@ -212,13 +148,12 @@ makeItemCard(
 	"HiddenTraps",
 	"HIDDEN TRAPS",
 	250,
-	"Adds one hidden trap to your inventory. 3D trap assets can be plugged in later.",
+	"Adds one hidden trap to your inventory.",
 	UDim2.fromOffset(370, 115)
 )
 
-local currentPhase = ""
 local function canOpenShop(): boolean
-	return currentPhase == "SafeZone" and LocalPlayer:GetAttribute("Role") == "Sniper"
+	return currentPhase == "SafeZone" and player:GetAttribute("Role") == "Sniper"
 end
 
 local function setShopVisible(visible: boolean)
@@ -230,13 +165,14 @@ end
 
 phaseEvent.OnClientEvent:Connect(function(phaseName: string)
 	currentPhase = phaseName
-	if phaseName ~= "SafeZone" then gui.Enabled = false end
+	if phaseName ~= "SafeZone" then
+		setShopVisible(false)
+	end
 end)
 
-UserInputService.InputBegan:Connect(function(input, processed)
-	if not processed and input.KeyCode == Enum.KeyCode.B and canToggle() then
-		gui.Enabled = not gui.Enabled
-		updateCoins()
+UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+	if not gameProcessed and input.KeyCode == Enum.KeyCode.B and canOpenShop() then
+		setShopVisible(not shopGui.Enabled)
 	end
 end)
 
@@ -248,25 +184,3 @@ task.spawn(function()
 		updateCoins()
 	end
 end)
-	if phaseName ~= "SafeZone" then
-		setShopVisible(false)
-	end
-end)
-
-UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-	if gameProcessed or input.KeyCode ~= Enum.KeyCode.B then
-		return
-	end
-
-	if canOpenShop() then
-		setShopVisible(not shopGui.Enabled)
-	end
-end)
-
-local leaderstats = LocalPlayer:WaitForChild("leaderstats", 10)
-if leaderstats then
-	local coins = leaderstats:WaitForChild("Coins", 10)
-	if coins and coins:IsA("IntValue") then
-		coins.Changed:Connect(updateCoins)
-	end
-end
