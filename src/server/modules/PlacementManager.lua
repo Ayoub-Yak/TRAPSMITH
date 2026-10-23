@@ -21,7 +21,7 @@ end
 
 local function isInsideRunnerSegment(position: Vector3, runnerSpawn: BasePart, segmentIndex: number): boolean
 	local localPosition = runnerSpawn.CFrame:PointToObjectSpace(position)
-	local segmentLength = tonumber(runnerSpawn:GetAttribute("SegmentLength")) or 55
+	local segmentLength = tonumber(runnerSpawn:GetAttribute("SegmentLength")) or 70
 	local segmentWidth = tonumber(runnerSpawn:GetAttribute("SegmentWidth")) or 100
 	local forwardDistance = -localPosition.Z
 	local segmentStart = (segmentIndex - 1) * segmentLength

@@ -14,6 +14,7 @@ type SpawnManagerApi = {
 	init: (gameManagerRef: () -> string) -> (),
 	teleport: (player: Player, character: Model) -> (),
 	teleportActivePlayers: () -> (),
+	updateRunnerSpawn: () -> (),
 }
 local SpawnManager = require(modules:WaitForChild("SpawnManager")) :: SpawnManagerApi
 local PlacementManager = require(modules:WaitForChild("PlacementManager"))
@@ -117,6 +118,7 @@ end
 
 local function runHuntPhase(duration: number)
 	currentPhase = Phase.RunHunt
+	SpawnManager.updateRunnerSpawn()
 	SpawnManager.teleportActivePlayers()
 	local startedAt = os.clock()
 	local lastBroadcast = -1
@@ -154,7 +156,9 @@ end
 task.spawn(function()
 	while true do
 		task.wait(20) -- Initial wait before starting the first round
+		RoleManager.reassignActiveRunnerSegments()
 		ResolutionManager.startRound()
+		SpawnManager.updateRunnerSpawn()
 
 		-- Phase 1: Safe Zone Shop (20 seconds)[cite: 8]
 		runPhase(Phase.SafeZone, 20)

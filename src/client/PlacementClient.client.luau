@@ -48,7 +48,7 @@ local function getSegmentIndex(): number?
 end
 
 local function getSegmentDimensions(spawn: BasePart): (number, number)
-	return tonumber(spawn:GetAttribute("SegmentLength")) or 55,
+	return tonumber(spawn:GetAttribute("SegmentLength")) or 70,
 		tonumber(spawn:GetAttribute("SegmentWidth")) or 100
 end
 

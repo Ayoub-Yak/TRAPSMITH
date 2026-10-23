@@ -39,4 +39,17 @@ function RoleManager.assignRole(player: Player)
 	print("[TRAPSMITH Module] " .. player.Name .. " assigned Runner segment " .. nextIndex .. ".")
 end
 
+function RoleManager.reassignActiveRunnerSegments()
+	local nextIndex = 1
+	for _, player in Players:GetPlayers() do
+		if player:GetAttribute("Role") == "Runner"
+			and player:GetAttribute("Spectating") ~= true then
+			player:SetAttribute("SegmentIndex", nextIndex)
+			nextIndex += 1
+		elseif player:GetAttribute("Role") == "Runner" then
+			player:SetAttribute("SegmentIndex", nil)
+		end
+	end
+end
+
 return RoleManager
