@@ -31,20 +31,49 @@ local function isInsideRunnerSegment(position: Vector3, runnerSpawn: BasePart, s
 		and math.abs(localPosition.X) <= segmentWidth / 2
 end
 
-local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
-	local trap = Instance.new("Part")
-	trap.Name = "HiddenTrap"
-	trap.Size = Vector3.new(4, 1, 4)
-	trap.CFrame = targetCFrame
-	trap.Anchored = true
-	trap.CanCollide = false
-	trap.CanQuery = false
-	trap.Transparency = 0.5
-	trap.BrickColor = BrickColor.new("Really black")
-	trap.Parent = map
+local function createHiddenTrap(map: Instance, targetCFrame: CFrame): BasePart
+	local trap: BasePart? = nil
+	local items = ReplicatedStorage:FindFirstChild("Items")
+	local models = items and items:FindFirstChild("Models")
+	local source = models and models:FindFirstChild("HiddenTrap")
+
+	if source and source:IsA("Model") then
+		local clone = source:Clone()
+		clone:PivotTo(targetCFrame)
+		clone.Parent = map
+		trap = clone.PrimaryPart or clone:FindFirstChildWhichIsA("BasePart", true)
+	elseif source and source:IsA("BasePart") then
+		local clone = source:Clone()
+		if clone:IsA("BasePart") then
+			trap = clone
+			clone.CFrame = targetCFrame
+			clone.Parent = map
+		end
+	end
+
+	if not trap then
+		local fallback = Instance.new("Part")
+		fallback.Name = "HiddenTrap"
+		fallback.Size = Vector3.new(4, 1, 4)
+		fallback.CFrame = targetCFrame
+		fallback.BrickColor = BrickColor.new("Really black")
+		fallback.Parent = map
+		trap = fallback
+	end
+
+	local placedTrap = trap
+	if not placedTrap then
+		error("[TRAPSMITH Placement] Failed to create hidden trap.")
+	end
+
+	placedTrap.Name = "HiddenTrap"
+	placedTrap.Anchored = true
+	placedTrap.CanCollide = false
+	placedTrap.CanQuery = false
+	placedTrap.Transparency = 0.5
 
 	local triggered = false
-	trap.Touched:Connect(function(hit: BasePart)
+	placedTrap.Touched:Connect(function(hit: BasePart)
 		if triggered then
 			return
 		end
@@ -62,7 +91,12 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 		humanoid.WalkSpeed = 0
 		humanoid.JumpPower = 0
 		runner:SetAttribute("Stuck", true)
-		trap:Destroy()
+		local model = placedTrap:FindFirstAncestorOfClass("Model")
+		if model and model.Parent == map then
+			model:Destroy()
+		else
+			placedTrap:Destroy()
+		end
 
 		task.delay(2, function()
 			if humanoid.Parent then
@@ -75,7 +109,7 @@ local function createHiddenTrap(map: Instance, targetCFrame: CFrame): Part
 		end)
 	end)
 
-	return trap
+	return placedTrap
 end
 
 function PlacementManager.init(gameManagerRef: () -> string)

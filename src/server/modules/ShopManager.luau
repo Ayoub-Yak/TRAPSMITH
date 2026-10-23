@@ -2,21 +2,31 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ShopManager = {}
+local shared = ReplicatedStorage:WaitForChild("Shared")
+local itemCatalog = require(shared:WaitForChild("ItemCatalog") :: ModuleScript)
 
 export type ShopItem = {
+	Id: string,
 	DisplayName: string,
 	Price: number,
+	ModelName: string?,
 }
 
-local ItemCatalog: {[string]: ShopItem} = {
-	SpeedBuff = {DisplayName = "Speed Boost", Price = 150},
-	Shield = {DisplayName = "Body Shield", Price = 300},
-}
+local function listToMap(items): {[string]: ShopItem}
+	local result: {[string]: ShopItem} = {}
+	for _, item in items do
+		result[item.Id] = {
+			Id = item.Id,
+			DisplayName = item.Name,
+			Price = item.Price,
+			ModelName = item.ModelName,
+		}
+	end
+	return result
+end
 
-local SniperItemCatalog: {[string]: ShopItem} = {
-	OneShotRounds = {DisplayName = "One-Shot Rounds", Price = 400},
-	HiddenTraps = {DisplayName = "Hidden Traps", Price = 250},
-}
+local ItemCatalog: {[string]: ShopItem} = listToMap(itemCatalog.Runners)
+local SniperItemCatalog: {[string]: ShopItem} = listToMap(itemCatalog.Sniper)
 
 local remotes = ReplicatedStorage:FindFirstChild("Remotes")
 if not remotes then

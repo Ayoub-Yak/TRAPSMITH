@@ -6,6 +6,8 @@ local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local buyEvent = remotes:WaitForChild("BuySniperItem") :: RemoteEvent
 local phaseEvent = remotes:WaitForChild("UpdatePhase") :: RemoteEvent
+local shared = ReplicatedStorage:WaitForChild("Shared")
+local catalog = require(shared:WaitForChild("ItemCatalog") :: ModuleScript)
 local currentPhase = ""
 
 local ACCENT = Color3.fromRGB(180, 35, 45)
@@ -47,17 +49,6 @@ title.TextSize = 26
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = panel
 
-local subtitle = Instance.new("TextLabel")
-subtitle.Size = UDim2.new(1, -40, 0, 24)
-subtitle.Position = UDim2.fromOffset(20, 65)
-subtitle.BackgroundTransparency = 1
-subtitle.Text = "Acquire tactical advantages before the hunt"
-subtitle.TextColor3 = MUTED
-subtitle.Font = Enum.Font.Gotham
-subtitle.TextSize = 14
-subtitle.TextXAlignment = Enum.TextXAlignment.Left
-subtitle.Parent = panel
-
 local coinsLabel = Instance.new("TextLabel")
 coinsLabel.Size = UDim2.fromOffset(180, 30)
 coinsLabel.Position = UDim2.new(1, -200, 0, 28)
@@ -68,89 +59,79 @@ coinsLabel.TextSize = 18
 coinsLabel.TextXAlignment = Enum.TextXAlignment.Right
 coinsLabel.Parent = panel
 
-local closeHint = Instance.new("TextLabel")
-closeHint.Size = UDim2.new(1, -40, 0, 24)
-closeHint.Position = UDim2.new(0, 20, 1, -36)
-closeHint.BackgroundTransparency = 1
-closeHint.Text = "Press B to close"
-closeHint.TextColor3 = MUTED
-closeHint.Font = Enum.Font.Gotham
-closeHint.TextSize = 13
-closeHint.TextXAlignment = Enum.TextXAlignment.Right
-closeHint.Parent = panel
+local cards = Instance.new("Frame")
+cards.Size = UDim2.new(1, -40, 1, -130)
+cards.Position = UDim2.fromOffset(20, 95)
+cards.BackgroundTransparency = 1
+cards.Parent = panel
+
+local layout = Instance.new("UIGridLayout")
+layout.CellSize = UDim2.fromOffset(310, 220)
+layout.CellPadding = UDim2.fromOffset(20, 0)
+layout.Parent = cards
 
 local function updateCoins()
 	local leaderstats = player:FindFirstChild("leaderstats")
 	local coins = leaderstats and leaderstats:FindFirstChild("Coins")
-	coinsLabel.Text = if coins and coins:IsA("IntValue")
-		then tostring(coins.Value) .. " COINS"
-		else "0 COINS"
+	coinsLabel.Text = if coins and coins:IsA("IntValue") then tostring(coins.Value) .. " COINS" else " 0 COINS"
 end
 
-local function makeItemCard(itemId: string, itemName: string, price: number, description: string, position: UDim2)
+local function createItemCard(item)
 	local card = Instance.new("Frame")
-	card.Name = itemId .. "Card"
-	card.Position = position
-	card.Size = UDim2.fromOffset(310, 220)
+	card.Name = item.Id .. "Card"
 	card.BackgroundColor3 = PANEL
 	card.BorderColor3 = Color3.fromRGB(90, 45, 50)
-	card.Parent = panel
+	card.Parent = cards
+
+	local icon = Instance.new("ImageLabel")
+	icon.Size = UDim2.fromOffset(64, 64)
+	icon.Position = UDim2.fromOffset(16, 16)
+	icon.BackgroundColor3 = Color3.fromRGB(45, 25, 28)
+	icon.Image = item.ImageId
+	icon.Parent = card
 
 	local itemTitle = Instance.new("TextLabel")
-	itemTitle.Size = UDim2.new(1, -32, 0, 32)
-	itemTitle.Position = UDim2.fromOffset(16, 18)
+	itemTitle.Size = UDim2.new(1, -100, 0, 32)
+	itemTitle.Position = UDim2.fromOffset(92, 18)
 	itemTitle.BackgroundTransparency = 1
-	itemTitle.Text = itemName
+	itemTitle.Text = item.Name
 	itemTitle.TextColor3 = Color3.new(1, 1, 1)
 	itemTitle.Font = Enum.Font.GothamBold
-	itemTitle.TextSize = 19
+	itemTitle.TextSize = 18
 	itemTitle.TextXAlignment = Enum.TextXAlignment.Left
 	itemTitle.Parent = card
 
-	local itemDescription = Instance.new("TextLabel")
-	itemDescription.Size = UDim2.new(1, -32, 0, 60)
-	itemDescription.Position = UDim2.fromOffset(16, 62)
-	itemDescription.BackgroundTransparency = 1
-	itemDescription.Text = description
-	itemDescription.TextColor3 = MUTED
-	itemDescription.Font = Enum.Font.Gotham
-	itemDescription.TextSize = 14
-	itemDescription.TextWrapped = true
-	itemDescription.TextXAlignment = Enum.TextXAlignment.Left
-	itemDescription.TextYAlignment = Enum.TextYAlignment.Top
-	itemDescription.Parent = card
+	local description = Instance.new("TextLabel")
+	description.Size = UDim2.new(1, -32, 0, 54)
+	description.Position = UDim2.fromOffset(16, 88)
+	description.BackgroundTransparency = 1
+	description.Text = item.Description
+	description.TextColor3 = MUTED
+	description.Font = Enum.Font.Gotham
+	description.TextSize = 13
+	description.TextWrapped = true
+	description.TextXAlignment = Enum.TextXAlignment.Left
+	description.TextYAlignment = Enum.TextYAlignment.Top
+	description.Parent = card
 
 	local buyButton = Instance.new("TextButton")
-	buyButton.Size = UDim2.new(1, -32, 0, 48)
-	buyButton.Position = UDim2.new(0, 16, 1, -64)
+	buyButton.Size = UDim2.new(1, -32, 0, 44)
+	buyButton.Position = UDim2.new(0, 16, 1, -58)
 	buyButton.BackgroundColor3 = ACCENT
 	buyButton.BorderSizePixel = 0
-	buyButton.Text = "BUY  " .. tostring(price) .. " COINS"
+	buyButton.Text = "BUY  " .. item.Price .. " COINS"
 	buyButton.TextColor3 = Color3.new(1, 1, 1)
 	buyButton.Font = Enum.Font.GothamBold
-	buyButton.TextSize = 15
+	buyButton.TextSize = 14
 	buyButton.Parent = card
 	buyButton.Activated:Connect(function()
-		if shopGui.Enabled then
-			buyEvent:FireServer(itemId)
-		end
+		if shopGui.Enabled then buyEvent:FireServer(item.Id) end
 	end)
 end
 
-makeItemCard(
-	"OneShotRounds",
-	"ONE-SHOT ROUNDS",
-	400,
-	"Special ammunition placeholder for future custom bullet behavior.",
-	UDim2.fromOffset(20, 115)
-)
-makeItemCard(
-	"HiddenTraps",
-	"HIDDEN TRAPS",
-	250,
-	"Adds one hidden trap to your inventory.",
-	UDim2.fromOffset(370, 115)
-)
+for _, item in catalog.Sniper do
+	createItemCard(item)
+end
 
 local function canOpenShop(): boolean
 	return currentPhase == "SafeZone" and player:GetAttribute("Role") == "Sniper"
@@ -158,16 +139,12 @@ end
 
 local function setShopVisible(visible: boolean)
 	shopGui.Enabled = visible and canOpenShop()
-	if shopGui.Enabled then
-		updateCoins()
-	end
+	if shopGui.Enabled then updateCoins() end
 end
 
 phaseEvent.OnClientEvent:Connect(function(phaseName: string)
 	currentPhase = phaseName
-	if phaseName ~= "SafeZone" then
-		setShopVisible(false)
-	end
+	if phaseName ~= "SafeZone" then setShopVisible(false) end
 end)
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)

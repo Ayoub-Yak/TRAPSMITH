@@ -167,7 +167,7 @@ task.spawn(function()
 		runPhase(Phase.RunnerPlacement, 3)
 
 		-- Phase 3: Sniper Placement (10 seconds)
-		runPhase(Phase.SniperPlacement, 3)
+		runPhase(Phase.SniperPlacement, 10)
 
 		-- Countdown before players are released onto the track.
 		runPhase(Phase.RunHuntCountdown, 5)
